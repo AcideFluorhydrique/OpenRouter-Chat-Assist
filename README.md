@@ -1,3 +1,8 @@
+[🇨🇳中文](./README.md) | [🇬🇧English](./README.en.md)
+
+---
+
+
 # OpenRouter Chat Assistant
 
 这是一个使用 Python 和 Tkinter 构建的简洁桌面聊天客户端，通过 OpenRouter API 连接多种大型语言模型。

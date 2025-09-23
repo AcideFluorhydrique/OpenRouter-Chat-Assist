@@ -203,6 +203,7 @@ class ChatApp:
         model_combo = ttk.Combobox(row1_frame, textvariable=self.model_var, width=25, state="readonly")
         model_combo['values'] = (
             "openai/gpt-oss-20b:free", 
+            "x-ai/grok-4-fast:free",
             "deepseek/deepseek-chat-v3-0324:free",
             "deepseek/deepseek-r1-0528:free",
             "qwen/qwen3-coder:free",

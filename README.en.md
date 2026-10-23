@@ -11,12 +11,12 @@ This is a simple desktop chat client built with Python and Tkinter, connecting t
 
 ## ✨ Key Features
 
-* **Multi-Model Support**: Choose from multiple free and powerful chat models.
+* **Multi-Model Support**: Fetches the current model list from OpenRouter at startup (optionally free models only), or type any model ID. Defaults to `openrouter/free`, which routes to an available free model.
 * **Theme Switching**: Easily toggle between light and dark themes, with preferences automatically saved.
-* **Markdown Rendering**: The chat window supports rendering basic Markdown formats, including headers, bold, italic, code blocks, and lists.
+* **Markdown Rendering**: Headings, bold, italic, code blocks, lists (numbered and nested), tables and links; LaTeX math (`$…$`, `$$…$$`, `\[…\]`, matrices, cases) is converted to readable Unicode.
 * **Configuration Persistence**: Automatically saves API Key, selected model, and theme to a local `chat_config.json` file.
 * **Cross-Platform**: Built with Python and Tkinter, theoretically compatible with Windows, macOS, and Linux.
-* **One-Click Build**: Includes a `build.py` script to easily package the application into a single executable file (portable).
+* **One-Click Build**: Includes a `build.py` script to easily package the application into a single executable file (portable). GitHub Actions builds the Windows `.exe` automatically and publishes it to Releases when a `v*` tag is pushed.
 
 ## 🛠️ Installation and Running (From Source)
 
@@ -65,6 +65,7 @@ The script will automatically install dependencies and use PyInstaller to packag
 ```
 .
 ├── openrouter_chat.py   # Main application GUI and logic code
+├── markdown_render.py   # Markdown / math formula rendering
 ├── build.py             # PyInstaller build script
 ├── requirements.txt     # Project dependencies
 └── README.md            # Project documentation

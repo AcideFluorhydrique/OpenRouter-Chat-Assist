@@ -11,12 +11,12 @@
 
 ## ✨ 主要功能
 
-* **多模型支持**: 内置多个免费和强大的聊天模型供选择。
+* **多模型支持**: 启动时从 OpenRouter 实时获取模型列表（可只看免费模型），也可直接输入任意模型 ID。默认使用 `openrouter/free` 自动路由到可用的免费模型。
 * **主题切换**: 支持浅色和深色主题一键切换，并自动保存你的偏好。
-* **Markdown渲染**: 聊天窗口支持渲染基本的Markdown格式，包括标题、粗体、斜体、代码块和列表等。
+* **Markdown渲染**: 支持标题、粗体、斜体、代码块、列表（含编号与嵌套）、表格和链接；LaTeX 数学公式（`$…$`、`$$…$$`、`\[…\]`、矩阵、分段函数）会转换为可读的 Unicode 形式。
 * **配置持久化**: 自动保存API Key、所选模型和主题到本地 `chat_config.json` 文件中。
 * **跨平台**: 基于Python和Tkinter，理论上可以在Windows、macOS和Linux上运行。
-* **一键构建**: 提供 `build.py` 脚本，可以轻松将应用打包成单个可执行文件 (portable)。
+* **一键构建**: 提供 `build.py` 脚本，可以轻松将应用打包成单个可执行文件 (portable)。GitHub Actions 会自动构建 Windows `.exe`，推送 `v*` 标签时发布到 Releases。
 
 ## 🛠️ 安装与运行 (从源代码)
 
@@ -59,6 +59,7 @@ python build.py
 ```
 .
 ├── openrouter_chat.py   # 主应用GUI和逻辑代码
+├── markdown_render.py   # Markdown / 数学公式渲染
 ├── build.py             # PyInstaller构建脚本
 ├── requirements.txt     # 项目依赖
 └── README.md            # 项目说明文件

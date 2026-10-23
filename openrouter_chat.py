@@ -9,12 +9,15 @@ Created on Thu Aug  14 14:43:23 2025
 
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
+import tkinter.font as tkfont
 import threading
 import json
 import os
-import re
+import urllib.request
+import webbrowser
 from openai import OpenAI
 from datetime import datetime
+from markdown_render import render_markdown
 
 class ChatApp:
     def __init__(self, root):
@@ -137,8 +140,8 @@ class ChatApp:
         default_config = {
             "api_key": "",
             "base_url": "https://openrouter.ai/api/v1",
-            "model": "openai/gpt-oss-20b:free",
-            "max_tokens": 1000,
+            "model": "openrouter/free",
+            "max_tokens": 4096,
             "temperature": 0.7,
             "theme": "light"
         }
@@ -200,30 +203,26 @@ class ChatApp:
         
         ttk.Label(row1_frame, text="模型:").pack(side=tk.LEFT)
         self.model_var = tk.StringVar(value=self.model)
-        model_combo = ttk.Combobox(row1_frame, textvariable=self.model_var, width=25, state="readonly")
-        model_combo['values'] = (
-            "openai/gpt-oss-20b:free", 
-            "x-ai/grok-4-fast:free",
-            "deepseek/deepseek-chat-v3-0324:free",
-            "deepseek/deepseek-r1-0528:free",
-            "qwen/qwen3-coder:free",
-            "qwen/qwen3-235b-a22b:free",
-            "moonshotai/kimi-k2:free",
-            "mistralai/mistral-small-3.2-24b-instruct:free",
-            "mistralai/devstral-small-2505:free",
-            "tencent/hunyuan-a13b-instruct:free",
-            "z-ai/glm-4.5-air:free",
-            "meta-llama/llama-3.3-70b-instruct:free",
-            "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-        )
-        model_combo.pack(side=tk.LEFT, padx=(5, 0))
-        
+        # 可编辑：模型列表会变动，允许直接输入任意模型 ID
+        self.model_combo = ttk.Combobox(row1_frame, textvariable=self.model_var, width=40)
+        self.model_combo['values'] = ("openrouter/free",)
+        self.model_combo.pack(side=tk.LEFT, padx=(5, 0))
+
         # 第二行：按钮和状态
         row2_frame = ttk.Frame(settings_frame)
         row2_frame.pack(fill=tk.X)
-        
+
         connect_btn = ttk.Button(row2_frame, text="连接", command=self.connect_api)
         connect_btn.pack(side=tk.LEFT)
+
+        # 刷新模型列表
+        refresh_btn = ttk.Button(row2_frame, text="刷新模型", command=self.refresh_models)
+        refresh_btn.pack(side=tk.LEFT, padx=(10, 0))
+
+        self.free_only_var = tk.BooleanVar(value=True)
+        free_only_check = ttk.Checkbutton(row2_frame, text="仅免费", variable=self.free_only_var,
+                                          command=self.refresh_models)
+        free_only_check.pack(side=tk.LEFT, padx=(5, 0))
         
         # 主题切换按钮
         self.theme_btn = ttk.Button(row2_frame, text="🌙 深色", command=self.toggle_theme)
@@ -281,124 +280,101 @@ class ChatApp:
         # 配置聊天显示的标签样式
         self.setup_chat_tags()
 
+        # 启动时从 OpenRouter 拉取当前模型列表
+        self.refresh_models()
+
+    def refresh_models(self):
+        """在后台线程中从 OpenRouter 获取模型列表"""
+        free_only = self.free_only_var.get()
+        threading.Thread(target=self.fetch_models, args=(free_only,), daemon=True).start()
+
+    def fetch_models(self, free_only):
+        """获取模型列表（/models 接口无需 API Key）"""
+        try:
+            url = self.base_url.rstrip('/') + "/models"
+            with urllib.request.urlopen(url, timeout=15) as resp:
+                data = json.load(resp)["data"]
+            # 新模型排在前面
+            data.sort(key=lambda m: m.get("created", 0), reverse=True)
+            if free_only:
+                ids = [m["id"] for m in data
+                       if m["id"].endswith(":free") or m["id"] == "openrouter/free"]
+            else:
+                ids = [m["id"] for m in data]
+            self.root.after(0, lambda: self.update_model_list(ids))
+        except Exception as e:
+            self.root.after(0, lambda: self.add_message("错误", f"获取模型列表失败: {e}", "error"))
+
+    def update_model_list(self, ids):
+        """更新模型下拉框"""
+        if "openrouter/free" in ids:
+            ids.remove("openrouter/free")
+            ids.insert(0, "openrouter/free")
+        self.model_combo['values'] = ids
+        self.add_message("系统", f"已获取 {len(ids)} 个模型", "system")
+
     def setup_chat_tags(self):
         """设置聊天显示的标签样式和Markdown支持"""
+        text_font = "Microsoft YaHei"
+        code_font = "Consolas"
+        math_font = "Cambria"
+        
         # 基础标签
-        self.chat_display.tag_configure("user", foreground="#0066cc", font=("Microsoft YaHei", 10, "bold"))
-        self.chat_display.tag_configure("assistant", foreground="#00aa00", font=("Microsoft YaHei", 10))
-        self.chat_display.tag_configure("error", foreground="#cc0000", font=("Microsoft YaHei", 10))
-        self.chat_display.tag_configure("timestamp", foreground="#888888", font=("Microsoft YaHei", 8))
-        self.chat_display.tag_configure("system", foreground="#666666", font=("Microsoft YaHei", 9, "italic"))
+        self.chat_display.tag_configure("user", foreground="#0066cc", font=(text_font, 10, "bold"))
+        self.chat_display.tag_configure("assistant", foreground="#00aa00", font=(text_font, 10))
+        self.chat_display.tag_configure("error", foreground="#cc0000", font=(text_font, 10))
+        self.chat_display.tag_configure("timestamp", foreground="#888888", font=(text_font, 8))
+        self.chat_display.tag_configure("system", foreground="#666666", font=(text_font, 9, "italic"))
         
         # Markdown标签样式
-        self.chat_display.tag_configure("h1", font=("Microsoft YaHei", 16, "bold"), spacing1=10, spacing3=5)
-        self.chat_display.tag_configure("h2", font=("Microsoft YaHei", 14, "bold"), spacing1=8, spacing3=4)
-        self.chat_display.tag_configure("h3", font=("Microsoft YaHei", 12, "bold"), spacing1=6, spacing3=3)
-        self.chat_display.tag_configure("bold", font=("Microsoft YaHei", 10, "bold"))
-        self.chat_display.tag_configure("italic", font=("Microsoft YaHei", 10, "italic"))
-        self.chat_display.tag_configure("code_inline", font=("Consolas", 9), background="#f6f8fa")
-        self.chat_display.tag_configure("code_block", font=("Consolas", 9), background="#f6f8fa", lmargin1=20, lmargin2=20)
-        self.chat_display.tag_configure("list_item", lmargin1=20, lmargin2=30)
-        self.chat_display.tag_configure("table_header", font=("Microsoft YaHei", 10, "bold"), background="#f0f0f0")
-        self.chat_display.tag_configure("table_cell", font=("Microsoft YaHei", 10))
-        self.chat_display.tag_configure("quote", font=("Microsoft YaHei", 10, "italic"), foreground="#666666", lmargin1=20, lmargin2=20)
+        self.chat_display.tag_configure("h1", font=(text_font, 16, "bold"), spacing1=10, spacing3=5)
+        self.chat_display.tag_configure("h2", font=(text_font, 14, "bold"), spacing1=8, spacing3=4)
+        self.chat_display.tag_configure("h3", font=(text_font, 12, "bold"), spacing1=6, spacing3=3)
+        self.chat_display.tag_configure("bold", font=(text_font, 10, "bold"))
+        self.chat_display.tag_configure("italic", font=(text_font, 10, "italic"))
+        self.chat_display.tag_configure("bold_italic", font=(text_font, 10, "bold italic"))
+        self.chat_display.tag_configure("strike", overstrike=True)
+        self.chat_display.tag_configure("code_inline", font=(code_font, 9), background="#f6f8fa")
+        self.chat_display.tag_configure("code_block", font=(code_font, 9), background="#f6f8fa", lmargin1=20, lmargin2=20)
+        self.chat_display.tag_configure("math", font=(math_font, 11), foreground="#6f42c1")
+        self.chat_display.tag_configure("math_block", font=(math_font, 12), foreground="#6f42c1",
+                                        justify=tk.CENTER, spacing1=4, spacing3=4)
+        self.chat_display.tag_configure("math_grid", font=(code_font, 11), foreground="#6f42c1",
+                                        lmargin1=40, lmargin2=40, spacing1=4, spacing3=4)
+        for level in range(4):
+            self.chat_display.tag_configure(f"list{level}", lmargin1=20 + 20 * level, lmargin2=34 + 20 * level)
+        self.chat_display.tag_configure("table", lmargin1=20, lmargin2=20)
+        self.chat_display.tag_configure("table_header", font=(text_font, 10, "bold"))
+        self.chat_display.tag_configure("hr", foreground="#bbbbbb")
+        self.chat_display.tag_configure("quote", font=(text_font, 10, "italic"), foreground="#666666", lmargin1=20, lmargin2=20)
+        self.chat_display.tag_configure("link", foreground="#0366d6", underline=True)
+        self.chat_display.tag_bind("link", "<Button-1>", self.open_link)
+        self.chat_display.tag_bind("link", "<Enter>", lambda e: self.chat_display.config(cursor="hand2"))
+        self.chat_display.tag_bind("link", "<Leave>", lambda e: self.chat_display.config(cursor=""))
+        
+        # 表格列宽按表头粗体字测量
+        self.table_font = tkfont.Font(family=text_font, size=10, weight="bold")
+
+    def open_link(self, event):
+        """点击链接时用浏览器打开"""
+        index = self.chat_display.index(f"@{event.x},{event.y}")
+        for tag in self.chat_display.tag_names(index):
+            if tag.startswith("url:"):
+                webbrowser.open(tag[4:])
+                break
 
     def parse_and_insert_markdown(self, content, base_tag="assistant"):
-        """解析并插入Markdown格式的内容"""
+        """解析并插入Markdown格式的内容（含数学公式）"""
         self.chat_display.config(state=tk.NORMAL)
         
-        lines = content.split('\n')
-        i = 0
-        
-        while i < len(lines):
-            line = lines[i]
-            
-            # 处理标题
-            if line.startswith('### '):
-                self.chat_display.insert(tk.END, line[4:] + '\n', ("h3", base_tag))
-            elif line.startswith('## '):
-                self.chat_display.insert(tk.END, line[3:] + '\n', ("h2", base_tag))
-            elif line.startswith('# '):
-                self.chat_display.insert(tk.END, line[2:] + '\n', ("h1", base_tag))
-            
-            # 处理代码块
-            elif line.strip().startswith('```'):
-                # 找到代码块结束
-                code_lines = []
-                i += 1
-                while i < len(lines) and not lines[i].strip().startswith('```'):
-                    code_lines.append(lines[i])
-                    i += 1
-                
-                if code_lines:
-                    self.chat_display.insert(tk.END, '\n'.join(code_lines) + '\n', ("code_block", base_tag))
-            
-            # 处理表格
-            elif '|' in line and line.strip().startswith('|') and line.strip().endswith('|'):
-                # 这是表格行
-                table_lines = [line]
-                # 收集连续的表格行
-                while i + 1 < len(lines) and '|' in lines[i + 1] and lines[i + 1].strip().startswith('|'):
-                    i += 1
-                    table_lines.append(lines[i])
-                
-                # 渲染表格
-                for j, table_line in enumerate(table_lines):
-                    # 跳过分隔行（包含 --- 的行）
-                    if '---' in table_line:
-                        continue
-                        
-                    cells = [cell.strip() for cell in table_line.split('|')[1:-1]]  # 去掉首尾的空元素
-                    cell_content = ' | '.join(cells)
-                    
-                    if j == 0:  # 表头
-                        self.chat_display.insert(tk.END, cell_content + '\n', ("table_header", base_tag))
-                    else:
-                        self.chat_display.insert(tk.END, cell_content + '\n', ("table_cell", base_tag))
-            
-            # 处理引用
-            elif line.startswith('> '):
-                self.chat_display.insert(tk.END, line[2:] + '\n', ("quote", base_tag))
-            
-            # 处理列表
-            elif re.match(r'^[\-\*\+]\s+', line) or re.match(r'^\d+\.\s+', line):
-                # 提取列表项内容
-                match = re.match(r'^([\-\*\+]|\d+\.)\s+(.*)', line)
-                if match:
-                    bullet, content_text = match.groups()
-                    self.chat_display.insert(tk.END, f"• {content_text}\n", ("list_item", base_tag))
-                else:
-                    self.chat_display.insert(tk.END, line + '\n', base_tag)
-            
-            # 处理普通段落（包含行内格式）
-            else:
-                self.parse_inline_markdown(line + '\n', base_tag)
-            
-            i += 1
+        for text, tags in render_markdown(content, measure=self.table_font.measure):
+            for tag in tags:
+                # 表格制表位
+                if tag.startswith("tbl:") and tag[4:]:
+                    self.chat_display.tag_configure(tag, tabs=tag[4:].split(","))
+            self.chat_display.insert(tk.END, text, (base_tag,) + tags)
         
         self.chat_display.config(state=tk.DISABLED)
-
-    def parse_inline_markdown(self, text, base_tag):
-        """解析行内Markdown格式"""
-        # 处理粗体 **text**
-        parts = re.split(r'(\*\*[^*]+\*\*)', text)
-        for part in parts:
-            if part.startswith('**') and part.endswith('**'):
-                self.chat_display.insert(tk.END, part[2:-2], ("bold", base_tag))
-            else:
-                # 处理斜体 *text*
-                italic_parts = re.split(r'(\*[^*]+\*)', part)
-                for italic_part in italic_parts:
-                    if italic_part.startswith('*') and italic_part.endswith('*') and len(italic_part) > 2:
-                        self.chat_display.insert(tk.END, italic_part[1:-1], ("italic", base_tag))
-                    else:
-                        # 处理行内代码 `code`
-                        code_parts = re.split(r'(`[^`]+`)', italic_part)
-                        for code_part in code_parts:
-                            if code_part.startswith('`') and code_part.endswith('`'):
-                                self.chat_display.insert(tk.END, code_part[1:-1], ("code_inline", base_tag))
-                            else:
-                                self.chat_display.insert(tk.END, code_part, base_tag)
 
     def toggle_theme(self):
         """切换主题"""
@@ -447,7 +423,11 @@ class ChatApp:
             self.chat_display.tag_configure("system", foreground="#BBBBBB", font=("Microsoft YaHei", 9, "italic"))
             self.chat_display.tag_configure("code_inline", background="#404040")
             self.chat_display.tag_configure("code_block", background="#404040")
-            self.chat_display.tag_configure("table_header", background="#404040")
+            self.chat_display.tag_configure("math", foreground="#d2a8ff")
+            self.chat_display.tag_configure("math_block", foreground="#d2a8ff")
+            self.chat_display.tag_configure("math_grid", foreground="#d2a8ff")
+            self.chat_display.tag_configure("link", foreground="#58a6ff")
+            self.chat_display.tag_configure("quote", foreground="#aaaaaa")
         else:
             self.setup_chat_tags()
 
@@ -545,8 +525,11 @@ class ChatApp:
             )
             
             # 获取回复
+            # 推理模型可能把 max_tokens 全用在思考上，content 为空
             response = completion.choices[0].message.content
-            
+            if not response:
+                raise RuntimeError("模型返回了空内容（可能是 max_tokens 不足）")
+
             # 添加助手回复到聊天历史
             self.chat_history.append({"role": "assistant", "content": response})
             

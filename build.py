@@ -28,7 +28,7 @@ def build_executable():
     
     # PyInstaller 命令参数
     cmd = [
-        "pyinstaller",  # 假设 pyinstaller 已安装到 PATH；如果失败，可改为 [sys.executable, "-m", "PyInstaller", ...]
+        sys.executable, "-m", "PyInstaller",
         "--onefile",                    # 打包成单个文件
         "--windowed",                   # Windows下不显示控制台窗口
         "--name=OpenRouterChat",        # 可执行文件名称
@@ -52,33 +52,31 @@ def build_executable():
 def main():
     print("OpenRouter 聊天软件构建工具")
     print("=" * 40)
-    
+
     # 检查主文件是否存在
     if not os.path.exists("openrouter_chat.py"):
         print("错误: 找不到 openrouter_chat.py 文件")
         print("请确保该文件与构建脚本在同一目录下")
-        return
-    
+        return False
+
     # 安装依赖
     if not install_requirements():
-        return
-    
+        return False
+
     # 构建可执行文件
     if build_executable():
         print("\n构建成功!")
         print("你可以在 dist/ 目录下找到 OpenRouterChat.exe")
         print("这是一个 portable 版本，可以直接运行，无需安装 Python")
+        return True
     else:
         print("\n构建失败!")
+        return False
 
 if __name__ == "__main__":
-    main()
+    # 失败时返回非零退出码，让 CI 能检测到
+    sys.exit(0 if main() else 1)
 
 
-# 另存为 build.bat (Windows 批处理文件)
-"""
-@echo off
-echo 正在构建 OpenRouter 聊天软件...
-python build.py
-pause
-"""
+
+# Windows 下可直接运行: python build.py

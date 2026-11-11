@@ -74,6 +74,10 @@ def main():
         return False
 
 if __name__ == "__main__":
+    # Windows 控制台/CI 默认编码可能是 cp1252，无法输出中文，强制使用 UTF-8
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     # 失败时返回非零退出码，让 CI 能检测到
     sys.exit(0 if main() else 1)
 
